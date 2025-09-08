@@ -74,7 +74,8 @@ test_that("proper resolution values can be passed", {
     regexp = "`resolution` must be numeric"
   )
 
-  # TODO: Code in function needs to be updated to silence try error, once that is fixed this will error and need to be udpated
+  # TODO: Code in function needs to be updated to silence try error, 
+  # once that is fixed this will error and need to be udpated
   # since try is not set to silent a message is also being output
   # the message is a special type so expect_message doesn't pick it up
   msg_output <- capture.output({
@@ -143,6 +144,30 @@ test_that("check type = direct argument", {
   )
 })
 
+  # TODO: Code in function needs to be updated to provide warning if 
+  # upper limit is hitting upper bound (maybe) but definitely if the
+  # lower bound and upper bound are identical as in the above example. 
+  # See below test
+  # for more reasonable output for type = "direct" for brms_model_1
+test_that("check type = direct argument with in range value", {
+  output <- ecx(brms_model_1, x_var = "x", type = "direct", ecx_val = 0.5)
+  
+  expect_type(output, "double")
+  expect_length(output, 3)
+  expect_equal(output[[1]], 0.960904, tolerance = 0.001)
+  expect_equal(output[[2]], 0.8500972, tolerance = 0.001)
+  expect_equal(output[[3]], 1.05, tolerance = 0.001)
+  expect_equal(
+    attributes(output),
+    list(
+      names = c("Q50", "Q2.5", "Q97.5"),
+      resolution = 1000,
+      ecx_val = 0.5,
+      toxicity_estimate = "ecx"
+    )
+  )
+})
+
 test_that("check type = absolute argument", {
   output <- ecx(brms_model_1, x_var = "x", type = "absolute")
 
@@ -158,6 +183,14 @@ test_that("check type = absolute argument", {
       toxicity_estimate = "ecx"
     )
   )
+})
+
+test_that("check type = relative and absolute arguments behave as expeceted", {
+  output1 <- ecx(brms_model_1, x_var = "x", type = "relative", ecx_val = 50)
+  output2 <- ecx(brms_model_1, x_var = "x", type = "absolute", ecx_val = 50)
+  expect_gt(output2[[1]], output1[[1]])
+  expect_equal(output1[[1]], 0.9165, tolerance = 0.001)
+  expect_equal(output2[[1]], 0.97195, tolerance = 0.001)
 })
 
 test_that("type = absolute and value passed to trigger NAN catch", {
@@ -232,6 +265,9 @@ test_that("type errors when wrong value passed", {
   )
 })
 
+  # TODO error catch properly if more than one type, Perhaps use only
+  # first value with a warning?
+
 test_that("hormesis_def = max and type = absolute changes output values", {
   output <- ecx(brms_model_1, x_var = "x", hormesis_def = "max")
 
@@ -283,6 +319,39 @@ test_that("hormesis_def = max and type = relative changes output values", {
   )
 })
 
+test_that("hormesis_def = max changes output values", {
+  output1 <- ecx(brms_model_5, x_var = "x", ecx_val = 50)  
+  output2 <- ecx(brms_model_5, x_var = "x", hormesis_def = "max", ecx_val = 50)
+  expect_gt(output1[[1]], output2[[1]])
+  expect_equal(output1[[1]], 2.4497, tolerance = 0.001)
+  expect_equal(output2[[1]],  0.116, tolerance = 0.001)
+
+  expect_equal(
+    attributes(output1),
+    list(
+      names = c("Q50", "Q2.5", "Q97.5"),
+      resolution = 1000,
+      ecx_val = 50,
+      toxicity_estimate = "ecx"
+    )
+  )
+  expect_equal(
+    attributes(output2),
+    list(
+      names = c("Q50", "Q2.5", "Q97.5"),
+      resolution = 1000,
+      ecx_val = 50,
+      toxicity_estimate = "ecx"
+    )
+  )
+  
+  # TODO the output for hormesis_def = "max" makes no sense.
+  # It should be ~2 for these data. When fixed expect this test to fail.
+  # Note it should  remain less than hormesis_def = "control" for this example
+  # so the expect_gt should still pass
+})
+
+
 test_that("hormesis_def errors wrong values passed", {
   expect_error(
     ecx(brms_model_1, x_var = "x", hormesis_def = c("max", "control")),
@@ -294,6 +363,8 @@ test_that("hormesis_def errors wrong values passed", {
     "type must be one of 'max' or 'control' \\(the default\\)"
   )
 })
+
+
 
 test_that("xform function is applied to the values", {
   output_1 <- ecx(brms_model_1, x_var = "x")
