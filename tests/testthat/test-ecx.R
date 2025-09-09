@@ -461,6 +461,8 @@ test_that("check prob_vals can have more then 3 values", {
 
 # BRMS specific tests -----------------------------------------------------
 
+  # TODO I would like to make this in line with the revised 
+  # bayesnec methods that do allow this, so this test will fail eventually.
 test_that("can only pass a single exc_val argument", {
   expect_error(
     ecx(brms_model_1, x_var = "x", ecx_val = c(10, 50, 100)),
@@ -468,6 +470,9 @@ test_that("can only pass a single exc_val argument", {
   )
 })
 
+  # NOTE Not sure why this is specific to BRMS. Also - lodged issue to make
+  # ecx_val a proportion not percentage. Many of these would need to be extrapolated
+  # beyond the observed data and so should have a warning to pass an extended xrange.
 test_that("when type is not direct ecx_val has to between 1 and 99", {
   expect_length(ecx(brms_model_1, x_var = "x", type = "absolute", ecx_val = 2), 3)
   expect_length(ecx(brms_model_1, x_var = "x", type = "relative", ecx_val = 2), 3)
@@ -505,6 +510,7 @@ test_that("errors if x_var argument not provided", {
   )
 })
 
+ #TODO Fix error messsage typo below "suplied"
 test_that("errors if x_var is not in the data set", {
   expect_error(
     ecx(brms_model_1, x_var = "z"),
@@ -569,6 +575,7 @@ test_that("by_group = FALSE, group_var is in the data, get vector with length of
 
 # TODO think this is wrong and you should be able to pass a range
 # all that happens is it takes the value and shoves it in as the output
+# Yes this is definitely wrong! It should take a range.
 test_that("x_range argument", {
   output <- ecx(brms_model_1, x_var = "x", x_range = 0.5)
 
@@ -596,6 +603,7 @@ test_that("when using grouping variable the xform function is applied", {
   expect_equal(output_2$Q97.5, output_1$Q97.5 - 1, tolerance = 0.001)
 })
 
+# NOTE: this is interesting - we might want to add an error catch when group_var = x_var
 test_that("when by_group = TRUE, group_var is provided and posterior = TRUE, you get a long data frame", {
   output <- ecx(brms_model_1, x_var = "x", by_group = TRUE, group_var = "x", posterior = TRUE)
 
@@ -689,7 +697,8 @@ test_that("bnecfit works with default parameters", {
   )
 })
 
-# TODO this test errors because there is a bug in the code, when fixed this test should error as it should start working
+# TODO this test errors because there is a bug in the code, when fixed this test 
+# should error as it should start working
 test_that("bnecfit checking hormesis_def = max", {
   expect_error(
     ecx(bnec_model_1, hormesis_def = "max"),
@@ -719,6 +728,8 @@ test_that("bnecfit checking type = relative", {
   )
 })
 
+# TODO This test is not returning what would be expected for the defaults at all.
+# I'm not even sure what it is returning, definitely broken.
 test_that("bnecfit checking type = direct", {
   output <- ecx(bnec_model_1, type = "direct")
 
@@ -741,6 +752,12 @@ test_that("bnecfit checking type = direct", {
   )
 })
 
+test_that("bnecfit checking type = relative versus type = absolute behaves as expected", {
+  output1 <- ecx(bnec_model_1, type = "relative", ecx_val = 50)
+  output2 <- ecx(bnec_model_1, type = "absolute", ecx_val = 50)
+  expect_gt(output2[[1]], output1[[1]])
+}) 
+  
 test_that("bnecfit checking posterior = TRUE", {
   output <- ecx(bnec_model_1, posterior = TRUE)
 
@@ -785,6 +802,15 @@ test_that("bnecfit checking ecx_val changes", {
   )
 })
 
+test_that("bnecfit checking ecx_val changes as expect", {
+  output1 <- ecx(bnec_model_1, ecx_val = 10)
+  output2 <- ecx(bnec_model_1, ecx_val = 40)
+  output3 <- ecx(bnec_model_1, ecx_val = 70)
+  expect_gt(output2[[1]], output1[[1]])
+  expect_gt(output3[[1]], output2[[1]])
+
+})
+
 test_that("bnecfit checking resolution changes", {
   output <- ecx(bnec_model_1, resolution = 2)
 
@@ -807,6 +833,7 @@ test_that("bnecfit checking resolution changes", {
   )
 })
 
+# TODO, this output it weird, it doesn't make sense
 test_that("bnecfit checking x_range", {
   output <- ecx(bnec_model_1, x_range = c(2, 5))
 
@@ -828,6 +855,14 @@ test_that("bnecfit checking x_range", {
     tolerance = 0.001
   )
 })
+
+
+test_that("bnecfit checking x_range behaves as expected for extrapolation", {
+  output1 <- ecx(bnec_model_1, ecx_val = 95)  
+  output2 <- ecx(bnec_model_1, x_range = c(0.5, 5), ecx_val = 95)
+  expect_gt(output2[[3]], output1[[3]])
+})
+
 
 # more realistic examples -------------------------------------------------
 
