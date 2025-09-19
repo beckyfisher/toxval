@@ -881,3 +881,30 @@ test_that("brms additional example 1", {
     tolerance = 0.001
   )
 })
+
+# TODO Again, need to align output to be consistent across all methods
+# also, type = "direct" is not returning expected.
+test_that("bayesmanecfit works", {
+  output <- ecx(bayesnec::manec_example)
+  expect_equal(as.numeric(output), c(1.491403, 1.058833, 1.562578), tolerance = 0.001)
+  output1 <- ecx(bayesnec::manec_example, type = "absolute", ecx_val = 50) 
+  output2 <- ecx(bayesnec::manec_example, type = "relative", ecx_val = 50) 
+  output3 <- ecx(bayesnec::manec_example, type = "direct", ecx_val = 50) 
+  expect_equal(as.numeric(output1), c(1.673926, 1.609348, 1.754719), tolerance = 0.001)
+  expect_equal(as.numeric(output2), c(2.175785, 2.088265, 2.282329), tolerance = 0.001)
+  expect_equal(as.numeric(output3), c(1.4341787, 0.7174819, 1.5216707), tolerance = 0.001)
+  
+})
+
+test_that("bayesnecfit works", {
+  output <- ecx(ecx4param)
+  expect_equal(as.numeric(output), c(1.0117369, 0.6848611, 1.1877574), tolerance = 0.001)
+  output1 <- ecx(ecx4param, type = "absolute", ecx_val = 50) 
+  output2 <- ecx(ecx4param, type = "relative", ecx_val = 50) 
+  output3 <- ecx(ecx4param, type = "direct", ecx_val = 50) 
+  expect_equal(as.numeric(output1), c(1.663958, 1.593493, 1.757886), tolerance = 0.001)
+  expect_equal(as.numeric(output2), c(2.285408, 2.200791, 2.363106), tolerance = 0.001)
+  expect_equal(as.numeric(output3), c(1.663958, 1.593493, 1.757886), tolerance = 0.001)  
+})
+
+
