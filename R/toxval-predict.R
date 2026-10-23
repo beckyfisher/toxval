@@ -35,8 +35,8 @@
 #' factor, and otherwise the sorted order of the levels. Each method states
 #' what `group_var` must name.
 #'
-#' @param object A fitted model object. Methods are provided for [brms::brmsfit]
-#'   and `drc` fits.
+#' @param object A fitted model object. Methods are provided for
+#'   [brms::brmsfit], `drc` and `bayesnecfit` fits.
 #' @param x_var A string naming the predictor variable in `object`, or `NULL`
 #'   where the class of `object` records which of its variables is the
 #'   predictor. Each method states whether it accepts `NULL`.
@@ -240,6 +240,80 @@ toxval_predict.drc <- function(
   )
 }
 
+#' @describeIn toxval_predict Method for a single model fitted by
+#'   `bayesnec::bnec()`, of class `bayesnecfit`, which requires `bayesnec` to
+#'   be installed. Realisations are the posterior draws of the `brmsfit` held in
+#'   `object$fit`, and group-level effects are marginalised out
+#'   (`re_formula = NA`). The grid is the one `bayesnec` builds for its own
+#'   predictions, with a binomial or beta-binomial response predicted for one
+#'   trial, so that its curve is a proportion. `x_var` is read from the `crf()`
+#'   term when `NULL`, and a supplied `x_var` must match it. `group_var` must be
+#'   `NULL`, since a `bnec()` fit has one curve. A predictor transformed inside
+#'   `crf()`, such as `crf(log(x), ...)`, is reported in units of the variable
+#'   itself, `x`, so `xform = exp` must not be supplied for it.
+#'
+#' @export
+toxval_predict.bayesnecfit <- function(
+  object,
+  x_var = NULL,
+  group_var = NULL,
+  resolution = 500,
+  x_range = NULL,
+  ...
+) {
+  check_bayesnec_installed(object)
+  chk_bayesnec_supported(object)
+  chk_no_group_var(group_var, object)
+
+  data <- object$fit$data
+  x_var <- bnec_x_var(object$bayesnecformula, data, x_var)
+  newdata <- bnec_grid(object, resolution, x_range)
+  x_vec <- newdata[[x_var]]
+  # Read from the stored brmsfit rather than through bayesnec's own
+  # posterior_epred() methods, which have none for the components of a model
+  # set, so that one call serves both bayesnec classes (BAYESNEC-claude.md §3.1)
+  curve <- posterior_epred(object$fit, newdata = newdata, re_formula = NA)
+  chk_defined_grid(list(curve), x_vec)
+
+  new_toxval_pred(
+    curves = list(curve),
+    keys = group_keys(),
+    x_vec = x_vec,
+    meta = build_meta(
+      object = object,
+      x_vec = x_vec,
+      x_var = x_var,
+      curves = list(curve),
+      realisation = "draws",
+      family = object$fit$family$family,
+      data = data
+    )
+  )
+}
+
+#' @describeIn toxval_predict Method for any other `bayesnec` fit, which
+#'   errors. Group fits, joint refits and hurdle pairs each hold more than one
+#'   curve, over concentrations that can differ between curves, which a
+#'   [toxval_pred] does not yet represent.
+#'
+#' @export
+toxval_predict.bnecfit <- function(
+  object,
+  x_var = NULL,
+  group_var = NULL,
+  resolution = 500,
+  x_range = NULL,
+  ...
+) {
+  chk::abort_chk(
+    "`object` must be a ",
+    chk::cc(bnec_supported_classes(), conj = " or "),
+    " to be predicted by `toxval_predict()`, not a ",
+    chk::cc(class(object)[1]),
+    "."
+  )
+}
+
 #' Assemble the metadata of a toxval_pred
 #'
 #' Every method builds its `meta` here, so the contract is satisfied in one
@@ -256,6 +330,8 @@ toxval_predict.drc <- function(
 #' @param family The response distribution: the `brms` family, the `type` of a
 #'   `drc` fit, or `NULL` where there is none.
 #' @param seed The bootstrap seed, or `NULL`.
+#' @param data The data the model was fitted to. A `bnecfit` holds them in its
+#'   `brmsfit`, as `object$fit$data`, rather than as `object$data`.
 #'
 #' @return A named list satisfying the `meta` contract of [toxval_pred].
 #'
@@ -268,7 +344,8 @@ build_meta <- function(
   group_var = NULL,
   realisation,
   family = NULL,
-  seed = NULL
+  seed = NULL,
+  data = object$data
 ) {
   # EXPECTED-CHANGE multivariate brmsfit support, one curve per response
   # The one place that assumes every supported fit is univariate: such a fit
@@ -282,7 +359,7 @@ build_meta <- function(
     x_range = range(x_vec),
     # the lowest concentration in the data, not of the grid, which starts
     # elsewhere when `x_range` is supplied (T21)
-    x_control = min(object$data[[x_var]]),
+    x_control = min(data[[x_var]]),
     family = family,
     realisation = realisation,
     n_realisation = nrow(curves[[1]]),

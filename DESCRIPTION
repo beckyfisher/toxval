@@ -31,6 +31,7 @@ Imports:
     tidyr,
     withr
 Suggests:
+    bayesnec,
     BH,
     covr,
     drc,

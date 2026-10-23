@@ -5,6 +5,8 @@
 \alias{toxval_predict.default}
 \alias{toxval_predict.brmsfit}
 \alias{toxval_predict.drc}
+\alias{toxval_predict.bayesnecfit}
+\alias{toxval_predict.bnecfit}
 \title{Generate realisations of a fitted curve over a predictor grid}
 \usage{
 toxval_predict(
@@ -44,10 +46,28 @@ toxval_predict(
   seed = NULL,
   ...
 )
+
+\method{toxval_predict}{bayesnecfit}(
+  object,
+  x_var = NULL,
+  group_var = NULL,
+  resolution = 500,
+  x_range = NULL,
+  ...
+)
+
+\method{toxval_predict}{bnecfit}(
+  object,
+  x_var = NULL,
+  group_var = NULL,
+  resolution = 500,
+  x_range = NULL,
+  ...
+)
 }
 \arguments{
-\item{object}{A fitted model object. Methods are provided for \link[brms:brmsfit]{brms::brmsfit}
-and \code{drc} fits.}
+\item{object}{A fitted model object. Methods are provided for
+\link[brms:brmsfit]{brms::brmsfit}, \code{drc} and \code{bayesnecfit} fits.}
 
 \item{x_var}{A string naming the predictor variable in \code{object}, or \code{NULL}
 where the class of \code{object} records which of its variables is the
@@ -113,6 +133,23 @@ supplied \code{x_var} must match the dose variable of the fit, so another
 column, such as the response, cannot be passed as the predictor.
 \code{group_var} must name the column passed as \code{curveid}, and the levels are
 read from the coefficient names rather than from a column position.
+
+\item \code{toxval_predict(bayesnecfit)}: Method for a single model fitted by
+\code{bayesnec::bnec()}, of class \code{bayesnecfit}, which requires \code{bayesnec} to
+be installed. Realisations are the posterior draws of the \code{brmsfit} held in
+\code{object$fit}, and group-level effects are marginalised out
+(\code{re_formula = NA}). The grid is the one \code{bayesnec} builds for its own
+predictions, with a binomial or beta-binomial response predicted for one
+trial, so that its curve is a proportion. \code{x_var} is read from the \code{crf()}
+term when \code{NULL}, and a supplied \code{x_var} must match it. \code{group_var} must be
+\code{NULL}, since a \code{bnec()} fit has one curve. A predictor transformed inside
+\code{crf()}, such as \code{crf(log(x), ...)}, is reported in units of the variable
+itself, \code{x}, so \code{xform = exp} must not be supplied for it.
+
+\item \code{toxval_predict(bnecfit)}: Method for any other \code{bayesnec} fit, which
+errors. Group fits, joint refits and hurdle pairs each hold more than one
+curve, over concentrations that can differ between curves, which a
+\link{toxval_pred} does not yet represent.
 
 }}
 \section{Supplying the predictor}{
