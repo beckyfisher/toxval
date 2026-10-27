@@ -172,6 +172,26 @@ test_that("check type = direct argument with in range value", {
   
 })
 
+# The censoring of realisations that show no effect (#74) applies to nsec()
+# only. 95% of the controls exceed 0.5, and each is beyond that supplied level,
+# so the increasing row stays at the control, 0.8, rather than 1.05.
+test_that("ecx under direct keeps a realisation past the reference at the control (T21)", {
+  output <- suppressWarnings(
+    ecx(brms_model_1, x_var = "x", type = "direct", reference = 0.5)
+  )
+
+  expect_equal(
+    unlist(output[1, c("estimate", "conf.low", "conf.high")]),
+    c(estimate = 0.9538237, conf.low = 0.8, conf.high = 1.05),
+    tolerance = 1e-6
+  )
+  expect_equal(
+    unlist(output[2, c("estimate", "conf.low", "conf.high")]),
+    c(estimate = 0.8, conf.low = 0.8, conf.high = 1.05),
+    tolerance = 1e-6
+  )
+})
+
 test_that("check type = absolute argument", {
   output <- suppressWarnings(ecx(brms_model_1, x_var = "x", type = "absolute"))
 

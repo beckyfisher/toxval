@@ -113,8 +113,11 @@ compute_ecx <- function(
 #' Values are not summarised. A realisation with no crossing in a direction is
 #' `NA`. By construction of the quantile, a fraction `sig_val` of the
 #' realisations have a control at or below the decreasing reference, and on a
-#' decreasing curve none of them crosses it. How those realisations enter the
-#' summary is #60.
+#' decreasing curve none of them crosses it. They are placed at the control or
+#' censored when summarised, as `away_first` and `leaves_effect` decide (T21).
+#' `compute_ecx()` does not return them (#74): under `direct` a realisation
+#' past the supplied reference at the control is beyond that level, and under
+#' the other types no control is past its own reference.
 #'
 #' @param pred A `toxval_pred`.
 #' @param sig_val The quantile of the control realisations that sets the
@@ -129,8 +132,8 @@ compute_ecx <- function(
 #' @return A tibble with one row per curve and direction: the columns of
 #'   `keys`, `direction`, `sig_val`, `type`, `anchor`, `reference`, and the
 #'   list columns `control`, `asymptote` (`NA` unless `type` is `relative`),
-#'   `draws` and `ecnsec`, each holding one value per realisation. `ecnsec` is
-#'   a proportion (T32).
+#'   `away_first`, `leaves_effect`, `draws` and `ecnsec`, each holding one
+#'   value per realisation. `ecnsec` is a proportion (T32).
 #'
 #' @noRd
 compute_nsec <- function(
@@ -169,6 +172,12 @@ compute_nsec <- function(
       reference_by_row <- rep(reference[[direction]], nrow(curve))
       crossings_by_row(curve, pred$x_vec, reference_by_row, direction)
     })
+    away_first <- lapply(directions(), function(direction) {
+      away_first_by_row(curve, direction)
+    })
+    leaves_effect <- lapply(directions(), function(direction) {
+      leaves_effect_by_row(curve, reference[[direction]], direction)
+    })
     ecnsec <- ecnsec_value(curve, reference, type, upper, asymptote)
 
     dplyr::bind_cols(
@@ -181,6 +190,8 @@ compute_nsec <- function(
         reference = unname(reference[directions()]),
         control = list(control, control),
         asymptote = unname(asymptote[directions()]),
+        away_first = away_first,
+        leaves_effect = leaves_effect,
         draws = unname(draws),
         ecnsec = unname(ecnsec[directions()])
       )
@@ -262,6 +273,59 @@ crossings_by_row <- function(curve, x_vec, reference, direction) {
     function(j) find_crossings(curve[j, ], x_vec, reference[j])[[direction]],
     numeric(1)
   )
+}
+
+#' Whether each realisation's response first changes away from the effect
+#'
+#' Away from the effect is rising for the decreasing direction and falling for
+#' the increasing one. The first change is the first step along `x_vec` larger
+#' than `1e-8` of the largest absolute response of that realisation. A
+#' realisation with no such step counts as away.
+#'
+#' @inheritParams crossings_by_row
+#'
+#' @return A logical vector, one value per realisation.
+#'
+#' @noRd
+away_first_by_row <- function(curve, direction) {
+  away <- if (direction == "decreasing") 1 else -1
+  vapply(
+    seq_len(nrow(curve)),
+    function(j) {
+      y <- curve[j, ]
+      # a curve can be flat at the control, as a `nec` plateau is, or change
+      # by round-off whose sign is arbitrary, as a `drc` log-logistic curve
+      # does near 0, so the first step is read above a tolerance
+      tolerance <- 1e-8 * max(abs(y[is.finite(y)]), 0)
+      step <- diff(y)
+      step <- step[!is.na(step) & abs(step) > tolerance]
+      !length(step) || away * step[1] > 0
+    },
+    logical(1)
+  )
+}
+
+#' Whether each realisation is ever on the no-effect side of its reference
+#'
+#' The no-effect side is above the reference for the decreasing direction and
+#' below it for the increasing one. A realisation past the reference at its
+#' control that is ever on this side, and does not cross back, leaves the
+#' effect side and does not return.
+#'
+#' @inheritParams crossings_by_row
+#'
+#' @return A logical vector, one value per realisation.
+#'
+#' @noRd
+leaves_effect_by_row <- function(curve, reference, direction) {
+  # `reference` is one value per realisation or one for the curve, and is
+  # recycled down the columns, so row j is compared with `reference[j]`
+  if (direction == "decreasing") {
+    no_effect_side <- curve > reference
+  } else {
+    no_effect_side <- curve < reference
+  }
+  rowSums(no_effect_side, na.rm = TRUE) > 0
 }
 
 #' The upper bound of the response, which sets the increasing `absolute` span

@@ -294,6 +294,8 @@ test_that("compute_nsec returns one row per direction for an ungrouped fit", {
       "reference",
       "control",
       "asymptote",
+      "away_first",
+      "leaves_effect",
       "draws",
       "ecnsec"
     )
@@ -474,5 +476,39 @@ test_that("compute_nsec errors when sig_val is not below 0.5", {
   expect_error(
     toxval:::compute_nsec(pred, sig_val = 0.5),
     "`sig_val` must be less than 0.5, not 0.5."
+  )
+})
+
+# the T21 flags ----------------------------------------------------------------
+
+test_that("away_first_by_row reads the first change above round-off (T21)", {
+  curve <- rbind(
+    rising = c(4, 5, 6, 7),
+    falling = c(4, 3, 2, 1),
+    flat_then_falling = c(4, 4, 4, 3),
+    round_off_then_falling = c(4, 4 + 1e-12, 3, 2),
+    flat = c(4, 4, 4, 4)
+  )
+
+  expect_identical(
+    toxval:::away_first_by_row(curve, "decreasing"),
+    c(TRUE, FALSE, FALSE, FALSE, TRUE)
+  )
+  expect_identical(
+    toxval:::away_first_by_row(curve, "increasing"),
+    c(FALSE, TRUE, TRUE, TRUE, TRUE)
+  )
+})
+
+test_that("leaves_effect_by_row compares each realisation with its reference (T21)", {
+  curve <- rbind(c(4, 5, 6), c(4, 5, 6))
+
+  expect_identical(
+    toxval:::leaves_effect_by_row(curve, c(5.5, 6), "decreasing"),
+    c(TRUE, FALSE)
+  )
+  expect_identical(
+    toxval:::leaves_effect_by_row(curve, c(4, 4.5), "increasing"),
+    c(FALSE, TRUE)
   )
 })

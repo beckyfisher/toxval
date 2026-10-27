@@ -378,6 +378,51 @@ whose `ecx()` reference is `NA`, a span of zero or less (T18), is excluded from
 the summary and counted in the warning, not censored. Under `range` it is
 censored instead (T38).
 
+Amended 2026-10-27 (RF, #74). In `nsec()`, a realisation whose control is past
+the reference in the direction sought, and which does not cross it, is censored
+under the second rule when both of the following hold. Otherwise it takes the
+control concentration, as before.
+
+- Its response first changes away from the effect as concentration rises from
+  the control: rising for the decreasing direction, falling for the increasing
+  one. The first change is the first step along `x_vec` larger than `1e-8` of
+  the largest absolute response of that realisation. A realisation with no such
+  step counts as away.
+- It is on the no-effect side of the reference somewhere in the evaluated
+  range. Having no crossing, it then leaves the effect side and does not
+  return.
+
+Such a realisation is past the reference only because its own control lies in
+the tail of the control realisations, which by construction is true of about
+`sig_val` of them. Placed at the control, it ranked with the most sensitive
+realisations and lowered the reported lower limit. A realisation that crosses
+the reference in the direction sought keeps that crossing, because a small first
+change does not locate the crossing. The decreasing row of `brms_model_3` has 10
+hormetic realisations that dip by about 0.0003, rise above the reference, and
+cross it near 1.2, where the other realisations cross.
+
+Each condition was rejected on its own, because each alone misplaces
+realisations in the test fixtures. Leaving the effect side, alone, censors a
+realisation that first changes further into the effect and leaves only near the
+top; its effect begins at the control. Changing away from the effect, alone,
+censors hormetic realisations that rise a little, stay past the reference
+throughout, and then fall steeply; the decreasing row of `bnec_model_1` has 4.
+The round-off tolerance is needed because some curves are flat at the control: a
+`nec` equation holds a plateau, and a `drc` log-logistic curve changes by about
+1e-14 near 0, with an arbitrary sign.
+
+The amendment applies to `nsec()` only (RF, 2026-10-27), and `ecx()` keeps the
+first rule unchanged for every `type`. Under `absolute`, `relative` and `range`
+each realisation's reference comes from its own control, so no control is past
+it. Under `direct` the reference is a level the user supplies, and a realisation
+past it at the control is beyond that level rather than an artefact of its own
+control, so the control concentration is the right answer for it. Applying the
+amendment there would change answers wholesale: in
+`ecx(brms_model_1, type = "direct", reference = 0.5)` 95% of the controls exceed
+0.5, and it would censor 858 of the 1,000 realisations of the increasing row and
+change its estimate from 0.8, the control, to 1.05, the highest concentration.
+The amendment departs from `bayesnec` D17 ruling 1, which this decision adopted.
+
 `meta` does not record the lowest concentration in the data, so the first rule
 adds `meta$x_control`, the concentration assumed to be the control (RF,
 2026-10-19). The `x_` prefix, as in `x_var` and `x_range`, separates it from the

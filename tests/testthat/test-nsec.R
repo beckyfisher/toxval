@@ -319,6 +319,11 @@ test_that("brms model errors if by_group is FALSE and a group_var is supplied", 
 })
 
 # EXPECTED-CHANGE ecnsec reference redefined, ecnsec values change #49 - done
+# Group 2's lower limits were 0.97893 (decreasing) and 0.92054 (increasing)
+# before #74. Of the 10 realisations past each reference at the control, 9 and
+# 8 change away from the effect and leave without returning, so they show no
+# effect and are censored rather than placed at the control (T21). Group 1's
+# decreasing row has no crossing and stays NA (T10).
 test_that("brms model runs when multiple variables in data and group_var specified", {
   output <- suppressWarnings(nsec(
     brms_model_2, x_var = "x", group_var = "z", by_group = TRUE
@@ -331,7 +336,7 @@ test_that("brms model runs when multiple variables in data and group_var specifi
   )
   expect_equal(
     output$conf.low,
-    c(NA_real_, 1.05, 0.97893, 0.92054),
+    c(NA_real_, 1.05, 1.00396, 0.94176),
     tolerance = 0.001
   )
   expect_equal(
@@ -518,6 +523,25 @@ test_that("brmsfit nsec xform changes output values with grouping", {
   expect_equal(output_1$ecnsec.high, output_2$ecnsec.high)
 })
 
+# 10 realisations of each fit are past the decreasing reference at the control,
+# 0.8. Those that rise from it, cross above it and stay there show no effect and
+# are censored (T21): 7 for brms_model_1, all 10 for brms_model_6. Before #74
+# all 10 were at the control, and the lower limits were 0.9847278 and 0.966905.
+# The new limits were computed outside toxval with quantile type 7.
+test_that("nsec censors the brms_model_1 realisations that show no decreasing effect (T21)", {
+  output <- suppressWarnings(nsec(brms_model_1, x_var = "x", draws = TRUE))
+
+  expect_identical(sum(output$draws[[1]]$value.draw == 0.8), 3L)
+  expect_equal(output$conf.low[[1]], 0.991338, tolerance = 1e-6)
+})
+
+test_that("nsec censors the brms_model_6 realisations that show no decreasing effect (T21)", {
+  output <- suppressWarnings(nsec(brms_model_6, x_var = "x", draws = TRUE))
+
+  expect_identical(sum(output$draws[[1]]$value.draw == 0.8), 0L)
+  expect_equal(output$conf.low[[1]], 0.9716878, tolerance = 1e-6)
+})
+
 # nsec.drc — additional tests ---------------------------------------------
 
 # EXPECTED-CHANGE enable once output is the toxval tibble (uniform naming) #4
@@ -683,7 +707,10 @@ test_that("nsec relative takes ecnsec as a proportion of the span to the asympto
 #   sp_growth   decreasing 0.4181719, 0.8688531, 1.5,       0.8209478
 #   sp_growth   increasing 1.5,       1.5,       1.5,       2.350757
 # The references are unchanged. sp_survival increasing has no realisation that
-# crosses its reference, so it is NA.
+# crosses its reference, so it is NA. sp_growth decreasing was 0.8591841
+# (0.3908073 to 1.5) before #74: 5 of the 10 realisations past its reference at
+# the control rise from it, cross above it and stay there, so they show no
+# effect and are censored rather than placed at the control (T21).
 test_that("nsec of a multivariate fit against the pre-refactor nsec_multi", {
   output <- suppressWarnings(
     nsec(nsec_multi_model_2, x_var = "dose", resolution = 50)
@@ -691,12 +718,12 @@ test_that("nsec of a multivariate fit against the pre-refactor nsec_multi", {
 
   expect_equal(
     output$estimate,
-    c(0.4615262, NA, 0.8591841, 1.5),
+    c(0.4615262, NA, 0.8671501, 1.5),
     tolerance = 1e-6
   )
   expect_equal(
     output$conf.low,
-    c(0.1559251, NA, 0.3908073, 1.5),
+    c(0.1559251, NA, 0.410851, 1.5),
     tolerance = 1e-6
   )
   expect_equal(

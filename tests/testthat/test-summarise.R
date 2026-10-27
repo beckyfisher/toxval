@@ -136,11 +136,13 @@ test_that("summarise_metric returns NA where no realisation crosses", {
   )
 })
 
-test_that("summarise_metric returns NA where the only realisations without a censored crossing are at x_control", {
+test_that("summarise_metric returns NA where a realisation past the reference shows no effect and the rest are censored", {
   x_vec <- 0:10
   # The increasing NSEC reference is the 99% quantile of the controls, 9.98.
-  # The first control, 10, already lies above it, so that realisation is placed
-  # at x_control; the other two never rise and are censored. None crosses.
+  # The first control, 10, already lies above it, but that realisation falls,
+  # away from the effect, and below the reference, so it is censored rather
+  # than placed at x_control (T21); the other two never rise and are censored.
+  # None crosses (T10).
   pred <- compute_pred(
     list(rbind(10 - x_vec, 9 - x_vec, 8 - x_vec)),
     x_vec,
@@ -151,7 +153,7 @@ test_that("summarise_metric returns NA where the only realisations without a cen
     result <- summarise_metric(compute_nsec(pred), pred, "nsec", draws = TRUE)
   )
 
-  expect_identical(result$draws[[2]]$value.draw, c(-1, Inf, Inf))
+  expect_identical(result$draws[[2]]$value.draw, c(Inf, Inf, Inf))
   expect_identical(
     unlist(result[2, c("estimate", "conf.low", "conf.high")]),
     c(estimate = NA_real_, conf.low = NA_real_, conf.high = NA_real_)
@@ -178,6 +180,110 @@ test_that("summarise_metric places a realisation already past the reference at x
     unlist(result[1, c("estimate", "conf.low", "conf.high")]),
     c(estimate = 2.5, conf.low = 0, conf.high = 5)
   )
+})
+
+# One realisation per case of T21, each past the decreasing NSEC reference at
+# its control. The 26 `t21_background` realisations, `6 - x`, set that
+# reference: with 9 controls at 4 and 26 at 6, the 0.25 quantile is 5.
+# `10 - curves` mirrors all 35 onto the increasing side, where the 0.75
+# quantile is 5 and the expected values are the same. `x_control` is -1, so a
+# realisation placed there is distinct from any crossing.
+t21_curves <- rbind(
+  crosses = c(4, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4),
+  dips_then_crosses = c(4, 3, 6, 6, 6, 4, 4, 4, 4, 4, 4),
+  towards = c(4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6),
+  flat_then_towards = c(4, 4, 4, 3, 2, 1, 0, -1, -2, -3, -4),
+  round_off_away_then_towards = c(4, 4 + 1e-12, 3, 2, 1, 0, -1, -2, -3, -4, -5),
+  hormetic = c(4, 4.5, 4.8, 4.5, 3, 2, 1, 0, -1, -2, -3),
+  away_never_leaves = c(4, 4.2, 4.4, 4.6, 4.8, 4.9, 4.9, 4.9, 4.9, 4.9, 4.9),
+  towards_then_leaves = c(4, 3, 2, 2, 3, 4, 6, 7, 8, 9, 10),
+  away_leaves = c(4, 5.5, 6, 7, 8, 9, 10, 10, 10, 10, 10)
+)
+t21_background <- matrix(6 - 0:10, nrow = 26, ncol = 11, byrow = TRUE)
+t21_expected <- c(3.5, 4.5, -1, -1, -1, -1, -1, -1, Inf)
+
+t21_pred <- function(curves) {
+  n <- nrow(curves)
+  compute_pred(
+    list(curves),
+    0:10,
+    x_control = -1,
+    asymptote = list(list(decreasing = rep(-10, n), increasing = rep(20, n)))
+  )
+}
+
+t21_nsec <- function(curves) {
+  pred <- t21_pred(curves)
+  warnings <- character()
+  result <- withCallingHandlers(
+    summarise_metric(
+      compute_nsec(pred, sig_val = 0.25),
+      pred,
+      "nsec",
+      prob_vals = all_quantiles,
+      draws = TRUE
+    ),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
+  list(result = result, warnings = warnings)
+}
+
+test_that("summarise_metric censors a decreasing NSEC realisation past the reference only where it changes away and leaves (T21)", {
+  output <- t21_nsec(rbind(t21_curves, t21_background))
+
+  expect_equal(output$result$reference[[1]], 5)
+  expect_equal(output$result$draws[[1]]$value.draw[1:9], t21_expected)
+  expect_match(output$warnings, "decreasing: 2.9% censored", all = FALSE)
+})
+
+test_that("summarise_metric censors an increasing NSEC realisation past the reference only where it changes away and leaves (T21)", {
+  output <- t21_nsec(10 - rbind(t21_curves, t21_background))
+
+  expect_equal(output$result$reference[[2]], 5)
+  expect_equal(output$result$draws[[2]]$value.draw[1:9], t21_expected)
+  expect_match(output$warnings, "increasing: 2.9% censored", all = FALSE)
+})
+
+test_that("summarise_metric leaves ecx under direct unchanged on the T21 curves (#74)", {
+  # rule 2 of T21 applies to an NSEC only. A realisation past the supplied
+  # level at the control is beyond it, so it stays at the control, the last
+  # one included
+  expected <- c(3.5, 4.5, -1, -1, -1, -1, -1, -1, -1)
+  direct <- function(curves) {
+    pred <- t21_pred(curves)
+    suppressWarnings(summarise_metric(
+      compute_ecx(pred, reference = 5, type = "direct"),
+      pred,
+      "ecx",
+      draws = TRUE
+    ))
+  }
+
+  expect_equal(direct(t21_curves)$draws[[1]]$value.draw, expected)
+  expect_equal(direct(10 - t21_curves)$draws[[2]]$value.draw, expected)
+})
+
+test_that("summarise_metric leaves ecx under absolute, relative and range unchanged on the T21 curves (#74)", {
+  # each reference comes from the realisation's own control, so no control is
+  # past it, and every realisation takes its own crossing or is censored
+  for (type in c("absolute", "relative", "range")) {
+    for (curves in list(t21_curves, 10 - t21_curves)) {
+      pred <- t21_pred(curves)
+      rows <- compute_ecx(pred, type = type)
+
+      result <- suppressWarnings(
+        summarise_metric(rows, pred, "ecx", draws = TRUE)
+      )
+
+      expect_equal(
+        lapply(result$draws, function(d) d$value.draw),
+        lapply(rows$draws, function(x) replace(x, is.na(x), Inf))
+      )
+    }
+  }
 })
 
 test_that("summarise_metric reports a censored quantile at the highest concentration (T21)", {

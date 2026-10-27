@@ -8,7 +8,11 @@
 #' lies (T21):
 #'
 #' - one whose control already lies beyond the reference in the direction
-#'   sought takes `meta$x_control`, the lowest concentration in the data;
+#'   sought takes `meta$x_control`, the lowest concentration in the data. For
+#'   an NSEC the exception is one whose response first changes away from the
+#'   effect and leaves the effect side of the reference without returning. It
+#'   shows no effect within the evaluated range, and is treated as the last
+#'   case below (#74);
 #' - one whose reference is `NA`, a span of zero or less (T18), or whose
 #'   control is not finite, such as a bootstrap draw outside the parameter
 #'   space, is excluded, except that under `range` a span of zero or less is
@@ -124,7 +128,19 @@ summarise_row <- function(row, x_control, x_max, prob_vals, xform) {
   } else {
     past_reference <- control >= reference
   }
-  beyond <- no_crossing & !excluded & !no_span & past_reference
+  # an NSEC reference is a tail quantile of the controls, so a realisation can
+  # be past it only through its own control. One that first changes away from
+  # the effect and leaves the effect side without returning shows no effect,
+  # and is censored rather than placed at the control; either condition alone
+  # misplaces fixture realisations (T21). Only `compute_nsec()` returns the
+  # flags: an ECx row keeps T21 unchanged, since under `direct` a realisation
+  # past the supplied level at the control is beyond it (#74)
+  no_effect <- if ("away_first" %in% names(row)) {
+    row$away_first[[1]] & row$leaves_effect[[1]]
+  } else {
+    rep(FALSE, length(values))
+  }
+  beyond <- no_crossing & !excluded & !no_span & past_reference & !no_effect
   censored <- no_crossing & !excluded & !beyond
 
   placed <- values

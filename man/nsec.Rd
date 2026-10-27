@@ -101,7 +101,12 @@ summarised by \code{prob_vals}. A direction in which no realisation crosses is
 returned with \code{NA} estimates.
 
 A fraction \code{sig_val} of the realisations have a control already beyond the
-reference; these are placed at the lowest concentration in the data. A
+reference. Unless it crosses the reference later, such a realisation is
+placed at the lowest concentration in the data. The exception is one whose
+response first changes away from the effect (rising for the decreasing
+direction, falling for the increasing one) and leaves the effect side of the
+reference without returning. It shows no effect within the evaluated range,
+and is treated as a realisation that does not reach the reference. A
 realisation that does not reach the reference within the evaluated range
 ranks above the highest concentration, and an interval limit that falls
 among such realisations is reported as the highest concentration, with a
